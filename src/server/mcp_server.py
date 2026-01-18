@@ -16,6 +16,7 @@ import logging
 from typing import Any
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.types import (
     Resource,
     Tool,
@@ -34,7 +35,11 @@ from src.database import DatabaseManager, Customer, Product, Order, OrderItem
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('mcp_server.log'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -87,39 +92,47 @@ async def list_resources() -> list[Resource]:
 
 
 @server.read_resource()
-async def read_resource(uri: str) -> str:
+async def read_resource(uri: str) -> str | bytes:
     """
     Read a specific resource by URI.
     
     Returns JSON-formatted schema information and sample data.
     """
-    logger.info(f"Reading resource: {uri}")
+    # Convert AnyUrl to string if needed
+    uri_str = str(uri)
+    logger.info(f"=== READ_RESOURCE CALLED ===")
+    logger.info(f"Original URI type: {type(uri)}")
+    logger.info(f"URI string: {repr(uri_str)}")
+    logger.info(f"Checking equality: {uri_str == 'db://schema/customers'}")
+    logger.info(f"==============================")
     
-    try:
-        if uri == "db://schema/customers":
-            return json.dumps({
-                "table": "customers",
-                "description": "Customer master data with contact information",
-                "columns": [
-                    {"name": "id", "type": "INTEGER", "primary_key": True},
-                    {"name": "email", "type": "VARCHAR(255)", "unique": True, "indexed": True},
-                    {"name": "first_name", "type": "VARCHAR(100)"},
-                    {"name": "last_name", "type": "VARCHAR(100)"},
-                    {"name": "phone", "type": "VARCHAR(20)", "nullable": True},
-                    {"name": "country", "type": "VARCHAR(100)", "indexed": True},
-                    {"name": "created_at", "type": "DATETIME"},
-                    {"name": "updated_at", "type": "DATETIME"},
-                ],
-                "relationships": ["Has many Orders"],
-                "indexes": ["idx_customer_name (last_name, first_name)", "idx_customer_country (country)"],
-                "sample_query": "SELECT * FROM customers WHERE country = 'USA' LIMIT 10"
-            }, indent=2)
-        
-        elif uri == "db://schema/products":
-            return json.dumps({
-                "table": "products",
-                "description": "Product catalog with pricing and inventory",
-                "columns": [
+    content_text = ""
+    
+    if uri_str == "db://schema/customers":
+        logger.info("Matched customers schema")
+        content_text = json.dumps({
+            "table": "customers",
+            "description": "Customer master data with contact information",
+            "columns": [
+                {"name": "id", "type": "INTEGER", "primary_key": True},
+                {"name": "email", "type": "VARCHAR(255)", "unique": True, "indexed": True},
+                {"name": "first_name", "type": "VARCHAR(100)"},
+                {"name": "last_name", "type": "VARCHAR(100)"},
+                {"name": "phone", "type": "VARCHAR(20)", "nullable": True},
+                {"name": "country", "type": "VARCHAR(100)", "indexed": True},
+                {"name": "created_at", "type": "DATETIME"},
+                {"name": "updated_at", "type": "DATETIME"},
+            ],
+            "relationships": ["Has many Orders"],
+            "indexes": ["idx_customer_name (last_name, first_name)", "idx_customer_country (country)"],
+            "sample_query": "SELECT * FROM customers WHERE country = 'USA' LIMIT 10"
+        }, indent=2)
+    
+    elif uri_str == "db://schema/products":
+        content_text = json.dumps({
+            "table": "products",
+            "description": "Product catalog with pricing and inventory",
+            "columns": [
                     {"name": "id", "type": "INTEGER", "primary_key": True},
                     {"name": "sku", "type": "VARCHAR(50)", "unique": True, "indexed": True},
                     {"name": "name", "type": "VARCHAR(255)"},
@@ -130,69 +143,70 @@ async def read_resource(uri: str) -> str:
                     {"name": "created_at", "type": "DATETIME"},
                     {"name": "updated_at", "type": "DATETIME"},
                 ],
-                "relationships": ["Has many OrderItems"],
-                "indexes": ["idx_product_category_price (category, price)"],
-                "sample_query": "SELECT * FROM products WHERE category = 'Electronics' ORDER BY price DESC LIMIT 10"
-            }, indent=2)
-        
-        elif uri == "db://schema/orders":
-            return json.dumps({
-                "table": "orders",
-                "description": "Customer orders with status tracking",
-                "columns": [
-                    {"name": "id", "type": "INTEGER", "primary_key": True},
-                    {"name": "customer_id", "type": "INTEGER", "foreign_key": "customers.id", "indexed": True},
-                    {"name": "order_date", "type": "DATETIME"},
-                    {"name": "status", "type": "VARCHAR(50)", "indexed": True, "values": ["pending", "processing", "shipped", "delivered", "cancelled"]},
-                    {"name": "total_amount", "type": "FLOAT"},
-                    {"name": "shipping_address", "type": "VARCHAR(500)"},
-                    {"name": "created_at", "type": "DATETIME"},
-                    {"name": "updated_at", "type": "DATETIME"},
-                ],
-                "relationships": ["Belongs to Customer", "Has many OrderItems"],
-                "indexes": ["idx_order_customer_date (customer_id, order_date)", "idx_order_status_date (status, order_date)"],
-                "sample_query": "SELECT * FROM orders WHERE status = 'delivered' ORDER BY order_date DESC LIMIT 10"
-            }, indent=2)
-        
-        elif uri == "db://schema/order_items":
-            return json.dumps({
-                "table": "order_items",
-                "description": "Line items for orders with quantity and pricing snapshot",
-                "columns": [
-                    {"name": "id", "type": "INTEGER", "primary_key": True},
-                    {"name": "order_id", "type": "INTEGER", "foreign_key": "orders.id", "indexed": True},
-                    {"name": "product_id", "type": "INTEGER", "foreign_key": "products.id", "indexed": True},
-                    {"name": "quantity", "type": "INTEGER"},
-                    {"name": "unit_price", "type": "FLOAT"},
-                    {"name": "subtotal", "type": "FLOAT"},
-                ],
-                "relationships": ["Belongs to Order", "Belongs to Product"],
-                "indexes": ["idx_order_item_order_product (order_id, product_id)"],
-                "sample_query": "SELECT * FROM order_items WHERE order_id = 1"
-            }, indent=2)
-        
-        elif uri == "db://stats/summary":
-            # Generate live statistics
-            with db.get_session() as session:
-                stats = {
-                    "record_counts": {
-                        "customers": session.query(Customer).count(),
-                        "products": session.query(Product).count(),
-                        "orders": session.query(Order).count(),
-                        "order_items": session.query(OrderItem).count(),
-                    },
-                    "order_status_distribution": _get_order_status_dist(session),
-                    "product_categories": _get_product_categories(session),
-                    "date_range": _get_date_range(session),
-                }
-                return json.dumps(stats, indent=2, default=str)
-        
-        else:
-            raise ValueError(f"Unknown resource URI: {uri}")
+            "relationships": ["Has many OrderItems"],
+            "indexes": ["idx_product_category_price (category, price)"],
+            "sample_query": "SELECT * FROM products WHERE category = 'Electronics' ORDER BY price DESC LIMIT 10"
+        }, indent=2)
     
-    except Exception as e:
-        logger.error(f"Error reading resource {uri}: {e}")
-        raise
+    elif uri_str == "db://schema/orders":
+        content_text = json.dumps({
+            "table": "orders",
+            "description": "Customer orders with status tracking",
+            "columns": [
+                {"name": "id", "type": "INTEGER", "primary_key": True},
+                {"name": "customer_id", "type": "INTEGER", "foreign_key": "customers.id", "indexed": True},
+                {"name": "order_date", "type": "DATETIME"},
+                {"name": "status", "type": "VARCHAR(50)", "indexed": True, "values": ["pending", "processing", "shipped", "delivered", "cancelled"]},
+                {"name": "total_amount", "type": "FLOAT"},
+                {"name": "shipping_address", "type": "VARCHAR(500)"},
+                {"name": "created_at", "type": "DATETIME"},
+                {"name": "updated_at", "type": "DATETIME"},
+            ],
+            "relationships": ["Belongs to Customer", "Has many OrderItems"],
+            "indexes": ["idx_order_customer_date (customer_id, order_date)", "idx_order_status_date (status, order_date)"],
+            "sample_query": "SELECT * FROM orders WHERE status = 'delivered' ORDER BY order_date DESC LIMIT 10"
+        }, indent=2)
+    
+    elif uri_str == "db://schema/order_items":
+        content_text = json.dumps({
+            "table": "order_items",
+            "description": "Line items for orders with quantity and pricing snapshot",
+            "columns": [
+                {"name": "id", "type": "INTEGER", "primary_key": True},
+                {"name": "order_id", "type": "INTEGER", "foreign_key": "orders.id", "indexed": True},
+                {"name": "product_id", "type": "INTEGER", "foreign_key": "products.id", "indexed": True},
+                {"name": "quantity", "type": "INTEGER"},
+                {"name": "unit_price", "type": "FLOAT"},
+                {"name": "subtotal", "type": "FLOAT"},
+            ],
+            "relationships": ["Belongs to Order", "Belongs to Product"],
+            "indexes": ["idx_order_item_order_product (order_id, product_id)"],
+            "sample_query": "SELECT * FROM order_items WHERE order_id = 1"
+        }, indent=2)
+    
+    elif uri_str == "db://stats/summary":
+        # Generate live statistics
+        with db.get_session() as session:
+            stats = {
+                "record_counts": {
+                    "customers": session.query(Customer).count(),
+                    "products": session.query(Product).count(),
+                    "orders": session.query(Order).count(),
+                    "order_items": session.query(OrderItem).count(),
+                },
+                "order_status_distribution": _get_order_status_dist(session),
+                "product_categories": _get_product_categories(session),
+                "date_range": _get_date_range(session),
+            }
+            content_text = json.dumps(stats, indent=2, default=str)
+    
+    else:
+        logger.error(f"Unknown resource URI: {uri}")
+        raise ValueError(f"Unknown resource URI: {uri}")
+    
+    # Return plain string - SDK will wrap it
+    logger.info(f"Returning content for {uri}, length: {len(content_text)}")
+    return content_text
 
 
 def _get_order_status_dist(session) -> dict[str, int]:

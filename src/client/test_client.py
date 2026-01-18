@@ -107,7 +107,7 @@ async def demo_resources(client: MCPClient):
     resources = await client.list_resources()
     print(f"\nAvailable resources: {len(resources)}")
     for res in resources:
-        print(f"  • {res.name} ({res.uri})")
+        print(f"  - {res.name} ({res.uri})")
     
     # Read customer schema
     print("\n--- Customer Schema ---")
@@ -181,9 +181,9 @@ async def demo_prompts(client: MCPClient):
 
 async def main():
     """Main demo function."""
-    print("\n" + "🚀 "*20)
+    print("\n" + "="*60)
     print("MCP Database Server - Client Demo")
-    print("🚀 "*20)
+    print("="*60)
     
     client = MCPClient()
     
@@ -197,7 +197,7 @@ async def main():
         await demo_prompts(client)
         
         print("\n" + "="*60)
-        print("✅ All demos completed successfully!")
+        print("[SUCCESS] All demos completed successfully!")
         print("="*60 + "\n")
     
     except Exception as e:
