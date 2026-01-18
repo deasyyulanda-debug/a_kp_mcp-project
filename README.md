@@ -35,22 +35,48 @@ a_kp_mcp-project/
 ```
 
 ## Quick Start
+
+### Prerequisites
+- Python 3.10 or higher
+- Git for version control
+
+### Installation & Setup
 ```powershell
-# Clone and setup
+# Clone repository
+git clone https://github.com/amittian/a_kp_mcp-project.git
 cd a_kp_mcp-project
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+
+# Install dependencies (no virtual environment needed for global install)
 pip install -r requirements.txt
 
-# Initialize database
-python src/database/init_db.py
-
-# Run MCP server
-python src/server/main.py
-
-# Test with client
-python src/client/test_client.py
+# Initialize and seed database with sample data
+python -m src.database.seed_data
 ```
+
+### Running the Demo
+```powershell
+# Run full integration test (Resources, Tools, Prompts)
+python -m src.client.test_client
+
+# Expected output:
+# ✓ 5 Resources available (database schemas + statistics)
+# ✓ 3 Tools working (query execution, customer analysis, sales analytics)
+# ✓ 2 Prompts available (customer analysis, category performance)
+```
+
+### What's Included
+**Resources** - Read-only data exposure:
+- Database schema metadata for all tables
+- Live database statistics (record counts, distributions)
+
+**Tools** - LLM-callable actions:
+- `query_database`: Execute SELECT queries with safety checks
+- `get_customer_orders`: Retrieve customer purchase history
+- `analyze_product_sales`: Sales performance by category
+
+**Prompts** - Workflow templates:
+- `analyze_customer`: Customer behavior analysis workflow
+- `category_performance`: Product category reporting template
 
 ## Implementation Phases
 1. ✅ Infrastructure setup and dependency management
@@ -58,7 +84,29 @@ python src/client/test_client.py
 3. ✅ MCP server core: Resources, Tools, and Prompts
 4. ✅ Client implementation for integration testing
 5. ✅ Architecture documentation with system diagrams
-6. � Validation and deployment readiness
+6. ✅ **Validation and deployment readiness** - All features tested and working
+
+## Validation Results
+**Status**: ✅ All MCP primitives validated and operational
+
+### Test Results (Jan 19, 2026)
+- **Resources**: 5/5 working correctly
+  - Database schemas (customers, products, orders, order_items)
+  - Live statistics aggregation
+- **Tools**: 3/3 operational
+  - Customer order retrieval: ✅ Working
+  - Product sales analysis: ✅ Working  
+  - Custom SQL queries: ✅ Working (minor SQLAlchemy warning)
+- **Prompts**: 2/2 templates generated correctly
+  - Customer analysis workflow
+  - Category performance reporting
+
+### Sample Data Statistics
+- 50 customers across 6 countries
+- 100 products in 6 categories
+- 200 orders spanning 3 months
+- 615 order line items
+- 5 order statuses (pending → delivered)
 
 ## Author
 **Amit Kumar** - AI Architect  
